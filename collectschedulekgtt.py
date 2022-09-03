@@ -235,7 +235,7 @@ class Collector:
             temp_list = [s for s in public if '[]  - '.lower() in s.lower()]
             for i in temp_list:
                 index = public.index(i)
-                public[index] = f'({index + 1}) --------'
+                public[index] = f'({index + 1}) — — — —'
 
             temp_list = [s for s in public if '[] И'.lower() in s.lower()]
             for i in temp_list:
