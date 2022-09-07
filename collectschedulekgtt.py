@@ -1,5 +1,6 @@
 from recipientgsheets import RecipientGoogleSheets
 import pandas as pd
+import datetime
 
 def center(*args:str):
     temp_list = [*args]
@@ -18,20 +19,55 @@ def get_all_groups() -> list:
         target = timetable.get_column(i)
         for y in target:
             if y.isupper():
-                temp_list.append(y)
+                if y != 'КЛАССНЫЙ ЧАС':
+                    temp_list.append(y)
             elif y == 'ОПИр-21-9':
                 temp_list.append(y)
-
             elif y == 'ОПИр-22-9':
                 temp_list.append(y)
-
             elif y == 'ОПИр-20-9':
                 temp_list.append(y)
-
     for _ in range(temp_list.count('ОБЖ')):
         temp_list.remove('ОБЖ')
 
-    return temp_list
+    return  temp_list
+
+def get_time(length,index_classroom = 0):
+    if index_classroom > 0:
+        classroom = '00:30'
+        school_break = '00:10'
+        thclass = '01:30'
+
+        timer = [thclass for _ in range(0,length)]
+        timer[index_classroom-1] = classroom
+
+        for i in range(1,length*2-1,2):
+            timer.insert(i,school_break)
+
+    elif index_classroom == 0:
+        school_break = '00:10'
+        thclass = '01:30'
+        timer = [thclass for _ in range(0, length)]
+
+        for i in range(1, length * 2 - 1, 2):
+            timer.insert(i, school_break)
+
+        if length == 6 :
+            timer[9] = '00:05'
+
+    start_time = '08:30'
+    hours_1,minutes_1 = int(start_time[0:2]),int(start_time[3:])
+    start_time = datetime.timedelta(hours=hours_1,minutes=minutes_1)
+
+    times = [datetime.timedelta(hours = int(i[:2]) , minutes = int(i[3:])) for i in timer]
+
+    for i in times:
+        start_time = start_time + i
+        times[times.index(i)] = str(start_time)[:-3]
+    times.insert(0, '08:30')
+
+    time = [times[i] for i in range(0,len(times),2)]
+    return time
 
 class Collector:
 
@@ -85,8 +121,6 @@ class Collector:
 
         self.group = group
         self.timetable = RecipientGoogleSheets('1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU')
-
-
 
         self.lesson=self.timetable.get_column(self.get_column_index())
 
@@ -174,7 +208,7 @@ class Collector:
                 for y in lesson:
                     if y.startswith('Иностранный язык'):
                         index = list_subjects.index(i)
-                        list_subjects[index] = f'{i}\n    {lesson[index]}'
+                        list_subjects[index] = f'{i[:16]}{i[48:]}\n            {lesson[index][:16]}{lesson[index][48:]}'
 
         for i in list_subjects:
             if i == ' - ':
@@ -242,13 +276,22 @@ class Collector:
                 index = public.index(i)
                 public[index] = f'({index + 1}) {i[7:]}'
 
-
-            return f'{center(timetable_date,self.group)}\n\n' + '\n'.join(public)
-
-
-
-
+            temp_list = [s for s in public if 'Чудакова '.lower() in s.lower()]
+            for i in temp_list:
+                index = public.index(i)
+                public[index] = f'({index + 1}) [121а] {i[7:]}'
 
 
 
+            index_classroom = 0
+            if (_classroom := 'КЛАССНЫЙ ЧАС') in public:
+                index_classroom = public.index(_classroom)
+
+            time = get_time(length=len(public),index_classroom=index_classroom)
+
+            for i in public:
+                index = public.index(i)
+                public[index] = f'{time[index]} - {i}'
+
+            return f'{center(timetable_date, self.group)}\n\n' + '\n'.join(public)
 
