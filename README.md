@@ -11,9 +11,10 @@ from collectschedulekgtt import Collector
 collector = Collector("Название группы")
 ```
 ### Пример
+
 ```python
-collector = Collector("1ИСИП-21-9") 
-collector.update_schedule() # Вернет расписание для группы 1ИСИП-21-9
+collector = Collector("1ИСИП-21-9")
+collector.get_image()  # Вернет расписание для группы 1ИСИП-21-9
 ```
 ## Примечание
 >Важно чтобы таблица была открытой для общего доступа!

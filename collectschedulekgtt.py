@@ -1,6 +1,33 @@
 from recipientgsheets import RecipientGoogleSheets
 import pandas as pd
+from PIL import Image,ImageDraw,ImageFont
 import datetime
+
+def get_text_size(list_subjects, font):
+
+    font = font
+    if [s for s in list_subjects if '\n' in s]:
+        for i in list_subjects:
+            if i == (x:=[s for s in list_subjects if '\n' in s][0]):
+                index = list_subjects.index(x)
+                list_subjects[index] = i.split('\n')
+                break
+        form_list = []
+        for i in list_subjects:
+            if isinstance(i,list):
+                for y in i:
+                    form_list.append(y)
+            else:
+                form_list.append(i)
+        for i in form_list:
+            if i.startswith(' '):
+                form_list[form_list.index(i)] = f'(#) {i.lstrip()}'
+    else:
+        form_list = list_subjects[:]
+
+    length =(font.getsize(max(form_list,key=len))[0])
+    height = [font.getsize(text)[1] for text in form_list]
+    return sum(height)-10,length+10
 
 def center(*args:str):
     temp_list = [*args]
@@ -12,250 +39,128 @@ def center(*args:str):
         new.append(stroke)
     return "\n".join(new)
 
-def get_all_groups() -> list:
+def get_groups_list() -> list:
     timetable = RecipientGoogleSheets('1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU')
     temp_list = []
-    for i in [1, 7, 13, 19]:
-        target = timetable.get_column(i)
-        for y in target:
-            if y.isupper():
-                if y != 'КЛАССНЫЙ ЧАС':
-                    temp_list.append(y)
-            elif y == 'ОПИр-21-9':
+    for i in (1, 7, 13, 19):
+        column = timetable.get_column(i)
+        for y in column:
+            if y.isupper() and y not in ('КЛАССНЫЙ ЧАС', 'ОБЖ') or y in ('ОПИр-21-9', 'ОПИр-22-9', 'ОПИр-20-9'):
                 temp_list.append(y)
-            elif y == 'ОПИр-22-9':
-                temp_list.append(y)
-            elif y == 'ОПИр-20-9':
-                temp_list.append(y)
-    for _ in range(temp_list.count('ОБЖ')):
-        temp_list.remove('ОБЖ')
+    return temp_list
 
-    return  temp_list
-
-def get_time(length,index_classroom = 0):
-    if index_classroom > 0:
-        classroom = '00:30'
-        school_break = '00:10'
-        thclass = '01:30'
-
-        timer = [thclass for _ in range(0,length)]
-        timer[index_classroom-1] = classroom
-
+def get_time(length,index_classroom = None):
+    start_time,classroom, school_break, thclass = ('08:30','00:30', '00:10', '01:30')
+    if index_classroom:
+        stage_1 = [thclass for _ in range(length)]
+        stage_1[index_classroom-1] = classroom
         for i in range(1,length*2-1,2):
-            timer.insert(i,school_break)
-
-    elif index_classroom == 0:
-        school_break = '00:10'
-        thclass = '01:30'
-        timer = [thclass for _ in range(0, length)]
-
+            stage_1.insert(i,school_break)
+    elif index_classroom is None:
+        stage_1 = [thclass for _ in range(0, length)]
         for i in range(1, length * 2 - 1, 2):
-            timer.insert(i, school_break)
-
+            stage_1.insert(i, school_break)
         if length == 6 :
-            timer[9] = '00:05'
-
-    start_time = '08:30'
-    hours_1,minutes_1 = int(start_time[0:2]),int(start_time[3:])
+            stage_1[9] = '00:05'
+    hours_1,minutes_1 = map(int,(start_time[0:2],start_time[3:]))
     start_time = datetime.timedelta(hours=hours_1,minutes=minutes_1)
-
-    times = [datetime.timedelta(hours = int(i[:2]) , minutes = int(i[3:])) for i in timer]
-
-    for i in times:
+    stage_2 = [datetime.timedelta(hours = int(i[:2]) , minutes = int(i[3:])) for i in stage_1]
+    for i in stage_2:
         start_time = start_time + i
-        times[times.index(i)] = str(start_time)[:-3]
-    times.insert(0, '08:30')
-
-    time = [times[i] for i in range(0,len(times),2)]
+        stage_2[stage_2.index(i)] = str(start_time)[:-3]
+    stage_2.insert(0, '08:30')
+    time = [stage_2[i] for i in range(0,len(stage_2),2)]
+    time = []
+    for i in range(0, len(stage_2), 2):
+        time.append(f'{stage_2[i]} - {stage_2[i + 1]}')
     return time
 
 class Collector:
-
-    def dictionary(self) -> dict:
-        dictionary = {}
-        temp_list = []
-        for i in [1, 7, 13, 19]:
-            target =self.timetable.get_column(i)
-            for y in target:
-                if y.isupper():
-                    if y != 'КЛАССНЫЙ ЧАС':
-                        temp_list.append(y)
-                        temp_list.append(y)
-                elif y == 'ОПИр-21-9':
-                    temp_list.append(y)
-                    temp_list.append(y)
-
-                elif y == 'ОПИр-22-9':
-                    temp_list.append(y)
-                    temp_list.append(y)
-
-                elif y =='ОПИр-20-9':
-                    temp_list.append(y)
-                    temp_list.append(y)
-
-
-        temp_list.pop(0)
-        temp_list.pop(-1)
-        for _ in range(temp_list.count('ОБЖ')):
-            temp_list.remove('ОБЖ')
-        for index in range(0, len(temp_list) - 1, 2):
-            dictionary[temp_list[index]] = temp_list[index + 1]
-        return dictionary
-
-    def exception_group(self) -> list:
-        exception_group = []
-        for i in [1, 7, 13, 19]:
-            temp_list = []
-            column = self.timetable.get_column(i)
-            for _ in range(column.count('ОБЖ')):
-                column.remove('ОБЖ')
-            for ellement in column:
-                if ellement.isupper():
-                    temp_list.append(ellement)
-                elif ellement == 'ОПИр-21-9':
-                    temp_list.append(ellement)
-            exception_group.append(temp_list[-1])
-        return exception_group
 
     def __init__(self,group:str):
 
         self.group = group
         self.timetable = RecipientGoogleSheets('1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU')
+        self.timetable_date = self.timetable.get_line(0)[0][9:33]
 
         self.lesson=self.timetable.get_column(self.get_column_index())
 
         self.up_cut = self.lesson.index(self.group)
 
-        exception_group = self.exception_group()
+        exception_group = self.get_exception_groups()
 
         if self.group in exception_group:
             self.down_cut = self.lesson.index(f'{self.group}') + 11
         else:
-            keys = self.dictionary()
-
+            keys = self.get_groups_dictionary()
             self.down_cut = self.lesson.index(keys[f'{self.group}'])
 
+    def get_groups_dictionary(self) -> dict:
+        temp_list = []
+        for i in (1, 7, 13, 19):
+            column = self.timetable.get_column(i)
+            for y in column:
+                if y.isupper() and y not in ('КЛАССНЫЙ ЧАС', 'ОБЖ') or y in ('ОПИр-21-9', 'ОПИр-22-9', 'ОПИр-20-9'):
+                    temp_list.append(y)
+                    temp_list.append(y)
+        temp_list = temp_list[1:-1]
+        return dict(zip(temp_list[::2], temp_list[1::2]))
+
+    def get_exception_groups(self) -> list:
+        exception_groups = []
+        for i in (1, 7, 13, 19):
+            column = self.timetable.get_column(i)
+            group = [i for i in column if i.isupper()][-1]
+            exception_groups.append(group)
+        return exception_groups
+
     def get_column_index(self)-> int:
+            df = pd.read_csv('https://docs.google.com/spreadsheets/d/1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU/gviz/tq?tqx=out:csv&sheet')
+            sought_line = [line for line in df.values if f'{self.group}' in line][0].tolist()
+            return sought_line.index(self.group)
 
-        URL = f'https://docs.google.com/spreadsheets/d/1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU/gviz/tq?tqx=out:csv&sheet'
-        df = pd.read_csv(URL)
+    def get_subjects_list(self)-> list:
 
-        X = []
-        for line in df.values:
-            result_line = [str(y) for y in line]
-            for ellement in result_line:
-
-                if 'nan' in result_line:
-                    for _ in range(result_line.count('nan')):
-                        index = result_line.index('nan')
-                        result_line[index] = ''
-
-                if ellement.endswith('.0'):
-                    result_line[result_line.index(ellement)] = ellement[:-2]
-
-            X.append(result_line)
-        temp_list = [s for s in X if f'{self.group}' in s]
-        for i in temp_list:
-            index_column = i.index(f'{self.group}')
-
-            return index_column
-
-    def get_schedule(self)-> list:
-
-        _lesson = self.lesson
-        _lesson = _lesson[self.up_cut:self.down_cut][1:]
-
+        _lesson = self.lesson[self.up_cut:self.down_cut][1:]
         _second_lesson = self.timetable.get_column(self.get_column_index() + 2)
         _second_lesson = _second_lesson[self.up_cut:self.down_cut][1:]
 
+        if len(_lesson) and len(_second_lesson) in (1,3,5,7,9,11):
+            _lesson.insert(0,''),_second_lesson.insert(0,'')
 
-
-        if len(_lesson) and len(_second_lesson) == 7:
-            _lesson.insert(0,'')
-            _second_lesson.insert(0,'')
-
-        if len(_lesson) and len(_second_lesson) == 11:
-            _lesson.insert(0,'')
-            _second_lesson.insert(0,'')
-
-        if len(_lesson) and len(_second_lesson) == 9:
-            _lesson.insert(0,'')
-            _second_lesson.insert(0,'')
-
-        if len(_lesson) and len(_second_lesson) == 5:
-            _lesson.insert(0,'')
-            _second_lesson.insert(0,'')
-
-        if len(_lesson) and len(_second_lesson) == 3:
-            _lesson.insert(0,'')
-            _second_lesson.insert(0,'')
-
-        if len(_lesson) and len(_second_lesson) == 1:
-            _lesson.insert(0,'')
-            _second_lesson.insert(0,'')
-
-        list_subjects = []
-        lesson = []
-
+        lessons = []
+        second_lessons = []
         for i in range(0, len(_lesson), 2):
-            list_subjects.append(f'{_lesson[i]} - {_lesson[i + 1]}')
+            lessons.append(f'{_lesson[i]} - {_lesson[i + 1]}')
+            second_lessons.append(f'{_second_lesson[i]} - {_second_lesson[i + 1]}')
 
-        for i in range(0, len(_lesson), 2):
-            lesson.append(f'{_second_lesson[i]} - {_second_lesson[i + 1]}')
+        for lesson,second_lesson,index in zip(lessons,second_lessons,enumerate(lessons)):
+            if lesson.startswith('Иностранный язык' or 'Инжинерная'):
+                if second_lesson != ' - ':
+                    lessons[index[0]] = f'{lesson}\n {36 * " "}{second_lesson}'
 
-        for i in list_subjects:
-            if i.startswith('Иностранный язык'):
-                for y in lesson:
-                    if y.startswith('Иностранный язык'):
-                        index = list_subjects.index(i)
-                        list_subjects[index] = f'{i[:16]}{i[48:]}\n            {lesson[index][:16]}{lesson[index][48:]}'
-
-        for i in list_subjects:
-            if i == ' - ':
-                index = [i for i, ltr in enumerate(list_subjects) if ltr == ' - ']
-                for z in index:
-                    list_subjects[z] = lesson[z]
-
-        return list_subjects
+        return lessons
 
     def get_cabinet(self)->list:
         _cabinet = self.timetable.get_column(self.get_column_index() + 4)
         _cabinet = _cabinet[self.up_cut:self.down_cut][1:]
 
-        if len(_cabinet) == 1:
+        if len(_cabinet) in (1,3,5,7,9,11):
             _cabinet.insert(0, '')
-
-        if len(_cabinet) == 3:
-            _cabinet.insert(0, '')
-
-        if len(_cabinet) == 5:
-            _cabinet.insert(0, '')
-
-        if len(_cabinet) == 7:
-            _cabinet.insert(0,'')
-
-        if len(_cabinet) == 9:
-                _cabinet.insert(0, '')
-
-        if len(_cabinet) == 11:
-            _cabinet.insert(0, '')
-
 
         cabinet = []
-        for i in range(0, len(_cabinet), 2):
-            cabinet.append(f'{_cabinet[i]}')
+        for index in range(0, len(_cabinet), 2):
+            cabinet.append(f'{_cabinet[index]}')
         return cabinet
 
-    def update_schedule(self)-> str:
-        timetable_date = self.timetable.get_line(0)[0][9:33]
-        schedule = self.get_schedule()
+    def get_ready_schedule(self)-> str:
+        timetable_date = self.timetable_date
+        schedule = self.get_subjects_list()
 
-        terms = all([i == ' - ' for i in schedule])
-        if terms:
-            str1 = 'Расписния нет,'
-            str2 = 'приятного отдыха!'
-            string = self.group+ "\n"
-            return f'{center(timetable_date,string,str1,str2)}'
+        if all([i == ' - ' for i in schedule]):
+            str1 = 'Расписния нет, приятного отдыха!'
+            group = self.group+ "\n"
+            return f'{center(timetable_date,group,str1)}'
 
         else:
             cabinet = self.get_cabinet()
@@ -263,8 +168,8 @@ class Collector:
 
             public = []
             for i in range(0, len(schedule)):
-                i = f'({num[i]}) [{cabinet[i]}] {schedule[i]}'
-                public.append(i)
+                result = f'({num[i]}) [{cabinet[i]}] {schedule[i]}'
+                public.append(result)
 
             temp_list = [s for s in public if '[]  - '.lower() in s.lower()]
             for i in temp_list:
@@ -276,22 +181,31 @@ class Collector:
                 index = public.index(i)
                 public[index] = f'({index + 1}) {i[7:]}'
 
-            temp_list = [s for s in public if 'Чудакова '.lower() in s.lower()]
-            for i in temp_list:
-                index = public.index(i)
-                public[index] = f'({index + 1}) [121а] {i[7:]}'
+            full_classtime = [s for s in public if 'КЛАССНЫЙ ЧАС'.lower() in s.lower()]
+            if full_classtime in public:
+                index_classroom = public.index(full_classtime)
 
-
-
-            index_classroom = 0
-            if (_classroom := 'КЛАССНЫЙ ЧАС') in public:
-                index_classroom = public.index(_classroom)
+            else:
+                index_classroom = None
 
             time = get_time(length=len(public),index_classroom=index_classroom)
 
             for i in public:
                 index = public.index(i)
-                public[index] = f'{time[index]} - {i}'
+                public[index] = "{"+time[index]+"} " + i
 
-            return f'{center(timetable_date, self.group)}\n\n' + '\n'.join(public)
+            return public
 
+    def get_timetable_date(self):
+        return self.timetable_date
+
+    def get_image(self):
+        font = ImageFont.truetype('Clear.ttf', size=40)
+        lines = self.get_ready_schedule()
+        text = f'\n'.join(lines)
+        list = lines[:]
+        height,length=get_text_size(list,font)
+        image = Image.new('RGBA', (length+50, height+30), '#282830')
+        idraw = ImageDraw.Draw(image)
+        idraw.text((15, 25), f'{text}', font=font)
+        image.save('image.png')
