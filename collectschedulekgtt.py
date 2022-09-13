@@ -200,7 +200,7 @@ class Collector:
         return self.timetable_date
 
     def get_image(self):
-        font = ImageFont.truetype('Clear.ttf', size=40)
+        font = ImageFont.truetype('Clear_font.ttf', size=40)
         lines = self.get_ready_schedule()
         text = f'\n'.join(lines)
         list = lines[:]
