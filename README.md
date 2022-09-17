@@ -5,10 +5,11 @@ ____
 pip install collectschedulekgtt
 ```
 ### Импорт и инициализация
-```python
-from collectschedulekgtt import Collector
 
-collector = Collector("Название группы")
+```python
+from collectschedulekgtt import Scavanger
+
+collector = Scavanger("Название группы")
 ```
 ### Пример
 
