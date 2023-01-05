@@ -1,250 +1,337 @@
-from recipientgsheets import RecipientGoogleSheets
-import pandas as pd
-from PIL import Image,ImageDraw,ImageFont
+import sys
 
-def text_size(list_subjects, font):
+from GoogleTable import GoogleTable
+from filters import *
+from fucntions import *
+from PIL import Image, ImageDraw, ImageFont
+from datetime import datetime
+from filters import groups
 
-    font = font
-    if [s for s in list_subjects if '\n' in s]:
-        for i in list_subjects:
-            if i == (x:=[s for s in list_subjects if '\n' in s][0]):
-                index = list_subjects.index(x)
-                list_subjects[index] = i.split('\n')
-                break
-        form_list = []
-        for i in list_subjects:
-            if isinstance(i,list):
-                for y in i:
-                    form_list.append(y)
-            else:
-                form_list.append(i)
-        for i in form_list:
-            if i.startswith(' '):
-                form_list[form_list.index(i)] = f'(#) {i.lstrip()}'
-    else:
-        form_list = list_subjects[:]
+from itertools import chain
 
-    length =(font.getsize(max(form_list,key=len))[0])
-    height = [font.getsize(text)[1] for text in form_list]
-    return sum(height)-10,length+10
 
-def center(*args:str):
-    temp_list = [*args]
-    very_long = int(len(max(temp_list,key=len))/2)
-    new =[]
-    for i in range(len(temp_list)):
-        cent = very_long - int(len(temp_list[i])/2)
-        stroke = f'{cent*" "}{temp_list[i]}'
-        new.append(stroke)
-    return "\n".join(new)
+class KgttException:
+    ...
 
-def get_groups_list() -> list:
-    timetable = RecipientGoogleSheets('1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU')
-    temp_list = []
-    for i in (1, 7, 13, 19):
-        column = timetable.get_column(i)
-        for y in column:
-            if y.isupper() and y not in ('КЛАССНЫЙ ЧАС', 'ОБЖ') or y in ('ОПИр-21-9', 'ОПИр-22-9', 'ОПИр-20-9'):
-                temp_list.append(y)
-    return temp_list
 
-def get_time(classhour = None):
+class KGTT:
 
-    if classhour is None:
-        time_without_classhour = ['08:30 - 10:00',
-                '10:10 - 11:40',
-                '11:50 - 13:20',
-                '13:30 - 15:00',
-                '15:10 - 16:40',
-                '16:45 - 18:15']
-        return time_without_classhour
-
-    else:
-
-        time_with_classhour = ['08:30 - 10:00',
-                                '10:10 - 11:40',
-                                '11:50 - 12:20',
-                                '12:30 - 14:00',
-                                '14:10 - 15:40',
-                                '16:50 - 17:20']
-        return time_with_classhour
-
-class Scavanger:
-
-    def __init__(self,group:str):
-
+    def __init__(self, group):
         self.group = group
-        self.timetable = RecipientGoogleSheets('1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU')
-        self.timetable_date = self.timetable.get_line(0)[0][9:33]
-        self.column_index = self.__column_index()
+        self.table = GoogleTable('1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU')
+        self.date = date_from_str(self.table.cell(0, 0))  # Дата в виде {23.12.2022} числа из (0,0) ячейки
 
-        self.lesson=self.timetable.get_column(self.column_index)
+        self.rows = self.table.rows()  # Получаем данные из таблицы
 
-        self.up_cut = self.lesson.index(self.group)
+    def groups_index_dict(self):
+        all_columns = self.table.columns().to_list()
+        all_columns = list(map(lambda x: list(filter(groups, x)), all_columns))  # Отчистка от всего кроме групп
+        all_groups = list(chain.from_iterable(all_columns))  # Сглаживание двумерного массива
 
-        exception_group = self.__exception_groups()
+        dict_index = {}
+        for group in all_groups:
+            dict_index[group] = self.rows.tindex(group)[1]
+        print(dict_index)
 
-        if self.group in exception_group:
-            self.down_cut = self.lesson.index(f'{self.group}') + 11
-
-        else:
-            keys = self.__groups_dictionary()
-            self.down_cut = self.lesson.index(keys[f'{self.group}'])
-
-    def __filtering(self,subjects_list):
-
-        temp_list = [s for s in subjects_list if '[]  - '.lower() in s.lower()]
-        for i in temp_list:
-            index = subjects_list.index(i)
-            subjects_list[index] = f'({index + 1}) — — — —'
-
-        temp_list = [s for s in subjects_list if '[] И'.lower() in s.lower()]
-        for i in temp_list:
-            index = subjects_list.index(i)
-            subjects_list[index] = f'({index + 1}) {i[7:]}'
-
-        temp_list = [s for s in subjects_list if 'Чудакова'.lower() in s.lower()]
-        for i in temp_list:
-            index = subjects_list.index(i)
-            subjects_list[index] = f'({index + 1}) {i[7:]}'
-
-        return subjects_list
-
-    def __add_timer(self,subjects):
-        classhour = [s for s in subjects if 'КЛАССНЫЙ ЧАС'.lower() in s.lower()]
-        global time
-        if classhour:
-            time = get_time(None)
-
-        if not classhour:
-            time = get_time(1)
-
-        for i in subjects:
-            index = subjects.index(i)
-            subjects[index] = "{" + time[index] + "} " + i
-
-        return subjects
-
-    def __cabinets(self)->list:
-        _cabinet = self.timetable.get_column(self.column_index + 4)
-        _cabinet = _cabinet[self.up_cut:self.down_cut][1:]
-
-        if len(_cabinet) in (1,3,5,7,9,11):
-            _cabinet.insert(0, '')
-
-        cabinet = []
-        for index in range(0, len(_cabinet), 2):
-            cabinet.append(f'{_cabinet[index]}')
-        return cabinet
-
-    def __subjects(self)-> list:
-
-        _lesson = self.lesson[self.up_cut:self.down_cut][1:]
-        _second_lesson = self.timetable.get_column(self.column_index + 2)
-        _second_lesson = _second_lesson[self.up_cut:self.down_cut][1:]
-
-        if len(_lesson) and len(_second_lesson) in (1,3,5,7,9,11):
-            _lesson.insert(0,''),_second_lesson.insert(0,'')
-
-        lessons = []
-        second_lessons = []
-        for i in range(0, len(_lesson), 2):
-            lessons.append(_lesson[i])
-            second_lessons.append(f'{_second_lesson[i]} - {_second_lesson[i + 1]}')
-
-        for lesson,second_lesson,index in zip(lessons,second_lessons,enumerate(lessons)):
-            if lesson.startswith('Иностранный язык' or 'Инжинерная'):
-                if second_lesson != ' - ':
-                    lessons[index[0]] = f'{lesson}\n {36 * " "}{second_lesson}'
-
-        return lessons
-
-    def __groups_dictionary(self) -> dict:
-        temp_list = []
-        for i in (1, 7, 13, 19):
-            column = self.timetable.get_column(i)
-            for y in column:
-                if y.isupper() and y not in ('КЛАССНЫЙ ЧАС', 'ОБЖ') or y in ('ОПИр-21-9', 'ОПИр-22-9', 'ОПИр-20-9'):
-                    temp_list.append(y)
-                    temp_list.append(y)
-        temp_list = temp_list[1:-1]
-        return dict(zip(temp_list[::2], temp_list[1::2]))
-
-    def __exception_groups(self) -> list:
-        exception_groups = []
-        for i in (1, 7, 13, 19):
-            column = self.timetable.get_column(i)
-            group = [i for i in column if i.isupper()][-1]
-            exception_groups.append(group)
-        return exception_groups
-
-    def __column_index(self)-> int:
-            df = pd.read_csv('https://docs.google.com/spreadsheets/d/1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU/gviz/tq?tqx=out:csv&sheet')
-            sought_line = [line for line in df.values if f'{self.group}' in line][0].tolist()
-            return sought_line.index(self.group)
-
-    def __teachers(self) -> list:
-        _lesson = self.lesson[self.up_cut:self.down_cut][1:]
-        if len(_lesson) in (1, 3, 5, 7, 9, 11):
-            _lesson.insert(0, '')
-
-        teachers = [_lesson[i + 1] for i in range(0, len(_lesson), 2)]
-
-        return teachers
-
-    def ready_schedule(self):
-        schedule = self.__subjects()
-
-        if all([i == '' for i in schedule]):
-            return 'Расписния нет, приятного отдыха!'
-
-        else:
-            cabinet = self.__cabinets()
-            num = [i for i in range(1, len(cabinet)+1)]
-
-            subjects = []
-            for i in range(0, len(schedule)):
-                result = f'({num[i]}) [{cabinet[i]}] {schedule[i]}'
-                subjects.append(result)
-
-            self.__filtering(subjects)
-            self.__add_timer(subjects)
-
-            return subjects
+    def exception_groups(self):
+        all_columns = self.table.columns().to_list()  # Получаем колонки
+        all_columns = list(map(lambda x: list(filter(groups, x)), all_columns))  # Отчистка от всего кроме групп
+        return tuple([i[-1] for i in all_columns if i])  # Возвращаем список конечных групп
 
 
+print(KGTT('1ИСИП-21-9').exception_groups())
 
-    def get_information(self):
-        return center(self.timetable_date,self.group)
-
-    def get_image(self):
-        font = ImageFont.truetype('cl.ttf', size=40)
-        lines = self.ready_schedule()
-        print(lines)
-        # if all(' ' in lines) :
-        #     text = lines
-        #     height, length = text_size(text, font)
-        #     image = Image.new('RGBA', (length + 50, height + 30), '#282830')
-        #     idraw = ImageDraw.Draw(image)
-        #     idraw.text((15, 25), f'{text}', font=font)
-        #     image.save('image.png')
-        #     image.show()
-
-
-        # else:
-        #     text = f'\n'.join(lines)
-        #     list = lines[:]
-        #     height,length=text_size(list,font)
-        #     image = Image.new('RGBA', (length+50, height+30), '#282830')
-        #     idraw = ImageDraw.Draw(image)
-        #     idraw.text((15, 25), f'{text}', font=font)
-        #     image.save('image.png')
-        #     image.show()
-
-    def tester(self):
-        print(len(get_groups_list()))
-
-if __name__ == '__main__':
-    # x = Scavanger('1ИСИП-21-9')
-    x = Scavanger('1ОГР-21-9')
-    print(x.ready_schedule())
+#
+# def get_clear_data(string):
+#     import re
+#     cyrillic_lower_letters = 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя()'
+#     cyrillic_letters = cyrillic_lower_letters + cyrillic_lower_letters.upper()
+#     reg = re.compile(f'[{cyrillic_letters}]')
+#     ready_word = reg.sub('', string).strip(' ')
+#     return str(ready_word)
+#
+#
+# class __Hunter:
+#
+#     def __init__(self, group):
+#         self._group = group
+#         self.__timetable = GoogleTable('1rGJ4_4BbSm0qweN7Iusz8d55e6uNr6bFRCv_j3W5fGU')
+#         self._date = clear_str(self.__timetable.rows().cell(0, 0))  # Получение даты
+#
+#         self._table = self.__timetable.rows()
+#
+#         self._column_index = self._table.tindex(self._group)[0]
+#
+#
+#         print(self._column_index)
+#         self.__exclusion_groups = self.__exclusion_groups()
+#         self.__dictionary_groups = self.__dictionary_groups()
+#
+#         self.keys = self.__cutter_keys()
+#
+#     def __exclusion_groups(self) -> tuple:
+#         return tuple(tuple(filter(groups, row))[-1] for row in self._table if tuple(filter(groups, row)))
+#
+#     def __dictionary_groups(self) -> dict:
+#
+#         preparatory_list = [list(filter(groups, row)) for row in self._table if list(filter(groups, row))]
+#         preparatory_list = [a for b in preparatory_list for a in b]
+#         preparatory_list_2 = preparatory_list[1::]
+#         for ellement in preparatory_list_2:
+#             preparatory_list_2[preparatory_list_2.index(ellement)] = self.__timetable.rows().tindex(ellement)[1]
+#
+#         dictionary_groups = dict(zip(preparatory_list, preparatory_list_2))
+#
+#         for key in self.__exclusion_groups:
+#             dictionary_groups[key] = self.__timetable.indexes(key)[1] + 21
+#
+#         return dictionary_groups
+#
+#     def __cutter_keys(self):
+#         group = self._group
+#         column = self._table.to_list()[self._column_index]
+#         print(column)
+#         key_1 = column.index(group) + 1
+#         key_2 = self.__dictionary_groups[group]
+#
+#         return key_1, key_2
+#
+#
+# class __Butcher(__Hunter):
+#
+#     def __init__(self, group):
+#         super().__init__(group)
+#         self.lessons = self._lesson()
+#         self.main_index = tl_indexes(self.lessons)
+#
+#     def __b_num(self):
+#         key_1, key_2 = self.keys
+#         serial_start = [f' {i} ' for i in self._table[0][key_1:key_2] if i != '']
+#         return serial_start
+#
+#     def _teacher(self):
+#         key_1, key_2 = self.keys
+#         teacher = self._table[self._column_index][key_1:key_2]
+#         teacher_2 = self._table[self._column_index + 2][key_1:key_2]
+#         bad_cut(teacher, teacher_2)
+#         teacher_length = len(teacher) // 2
+#         teacher = teacher[1::2]
+#         teacher_2 = teacher_2[1::2]
+#         for i, t in enumerate(teacher_2):
+#             if teacher[i] == '' and t != '':
+#                 teacher[i] = t
+#             elif t != '':
+#                 teacher.insert(i + 1, t)
+#
+#         del teacher_2
+#
+#         if teacher_length != len(self.__b_num()):
+#             teacher.insert(0, '')
+#         return teacher
+#
+#     def __les(self):
+#         key_1, key_2 = self.keys
+#         lesson = self._table[self._column_index + 2][key_1:key_2]
+#         lesson = [i for i in lesson if i != '']
+#         return lesson
+#
+#     def _lesson(self):
+#         key_1, key_2 = self.keys
+#         lesson = self._table[self._column_index][key_1:key_2]
+#         lesson_2 = self._table[self._column_index + 2][key_1:key_2]
+#         bad_cut(lesson, lesson_2)
+#         lesson_length = len(lesson) // 2
+#         lesson = lesson[::2]
+#         lesson_2 = lesson_2[::2]
+#
+#         for i, les in enumerate(lesson_2):
+#             if lesson[i] == '' and les != '':
+#                 lesson[i] = les
+#             elif les != '':
+#                 lesson.insert(i + 1, les)
+#
+#         del lesson_2
+#
+#         eng = list(set([s for s in lesson if 'Ино' in s]))
+#         if eng:
+#             eng, = eng
+#             for i, les in enumerate(lesson):
+#                 if les == eng:
+#                     lesson[i] = 'Иностранный язык'
+#
+#         if lesson_length != len(self.__b_num()):
+#             lesson.insert(0, '')
+#
+#         return lesson
+#
+#     def _cabinet(self):
+#         key_1, key_2 = self.keys
+#         cabinet = self._table[self._column_index + 4][key_1:key_2]
+#         cabinet_2 = self._table[self._column_index + 1][key_1:key_2]
+#         cabinet_3 = self._table[self._column_index + 3][key_1:key_2]
+#         bad_cut(cabinet, cabinet_2, cabinet_3)
+#         cabinet_length = len(cabinet) // 2
+#         cabinet = cabinet[::2]
+#         cabinet_2 = cabinet_2[::2]
+#         cabinet_3 = cabinet_3[::2]
+#
+#         for i, c in enumerate(cabinet_2):
+#             if cabinet[i] == '' and c != '':
+#                 cabinet[i] = c
+#             elif c != '':
+#                 cabinet.insert(i + 1, c)
+#
+#         for i, c in enumerate(cabinet_3):
+#             if cabinet[i] == '' and c != '':
+#                 cabinet[i] = c
+#             elif c != '':
+#                 cabinet.insert(i + 1, c)
+#
+#         for i, c in enumerate(cabinet):
+#             if c == '##':
+#                 cabinet[i] = ''
+#
+#         del cabinet_2, cabinet_3
+#
+#         if cabinet_length != len(self.__b_num()):
+#             cabinet.insert(0, '')
+#
+#         return cabinet
+#
+#     def _number(self):
+#         key_1, key_2 = self.keys
+#         serial_start = [f' {i} ' for i in self._table[0][key_1:key_2] if i != '']
+#
+#         for i, l in enumerate(serial_start):
+#             for y in self.main_index:
+#                 if i == y:
+#                     serial_start.insert(i + 1, f'{serial_start[i].strip()}.2')
+#                     serial_start[y] = f'{serial_start[i].strip()}.1'
+#
+#         once_indexes = all_tl_indexes(self.lessons)
+#         if once_indexes:
+#             for i in once_indexes:
+#                 if self.__les() == [self.lessons[i], self._teacher()[i]]:
+#                     serial_start[i] = f'{serial_start[i].strip()}.2'
+#                 else:
+#                     serial_start[i] = f'{serial_start[i].strip()}.1'
+#
+#         return serial_start
+#
+#     def _time(self):
+#         length = len(self.lessons)
+#         clear_data = get_clear_data(self._date)
+#         if datetime.strptime(clear_data, '%d.%m.%Y').strftime('%w') == '3':
+#             time = ['08:30 - 10:00',
+#                     '10:10 - 11:40',
+#                     '11:50 - 12:20',
+#                     '12:30 - 14:00',
+#                     '14:10 - 15:40',
+#                     '16:50 - 17:20'][:length]
+#
+#         else:
+#             time = ['08:30 - 10:00',
+#                     '10:10 - 11:40',
+#                     '11:50 - 13:20',
+#                     '13:30 - 15:00',
+#                     '15:10 - 16:40',
+#                     '16:45 - 18:15'][:length]
+#
+#         for index in self.main_index:
+#             time.insert(index + 1, time[index])
+#
+#         return time
+#
+#     def _cleaner(self):
+#         teacher = self._teacher()
+#         lesson = self.lessons
+#         cabinet = self._cabinet()
+#         number = self._number()
+#         time = self._time()
+#
+#         indexes = []
+#         for t, ls, c in zip(enumerate(teacher), lesson, cabinet):
+#             if c == ls == t[1]:
+#                 indexes.append(t[0])
+#
+#             if t[1] == 'Чудакова А. Г.':
+#                 if c == '':
+#                     cabinet[t[0]] = '121a'
+#
+#         for i, n in enumerate(indexes):
+#             indexes[i] = n - i
+#
+#         for i in indexes:
+#             number.pop(i)
+#             time.pop(i)
+#             cabinet.pop(i)
+#             lesson.pop(i)
+#             teacher.pop(i)
+#
+#         return number, cabinet, lesson, teacher, time
+#
+#
+# class Schedule(__Butcher):
+#
+#     def __init__(self, group, parameters=(
+#             ('number', 'time', 'cabinet', 'lesson', 'teacher'), ('(&)', ' {&}', ' |&| ', '&', ' - &'))):
+#         super().__init__(group)
+#         self.parameters, self.design = parameters
+#
+#     def __configurator(self):
+#         data = self._cleaner()
+#         config = {
+#             'time': data[4],
+#             'number': data[0],
+#             'lesson': data[2],
+#             'teacher': data[3],
+#             'cabinet': data[1]
+#         }
+#         return [config[key] for key in self.parameters]
+#
+#     def __create_string(self):
+#         data = self.__configurator()
+#         rows = [[catalog[index] for catalog in data] for index in range(len(data[0]))]
+#         rows = after_restoration(rows, self.design)
+#         for index, ellement in enumerate(rows):
+#             coincidence = cleaner(del_service_marks(self.design), rows[index])
+#             rows[index] = coincidence
+#             rows[index] = ''.join(ellement)
+#
+#         if not rows:
+#             rows = 'Расписания нет , приятного отдыха!'
+#         return rows
+#
+#     def get_text_without_information(self):
+#
+#         string = self.__create_string()
+#         if isinstance(string, str):
+#             return string
+#         else:
+#             return '\n'.join(string)
+#
+#     def get_information(self):
+#         return self._date
+#
+#     def get_group(self):
+#         return self._group
+#
+#     def get_text(self):
+#         return f'{self.get_information()}\nДля группы : {self.get_group()}\n\n{self.get_text_without_information()}'
+#
+#     def get_image(self):
+#         font = ImageFont.truetype('Clear_font.ttf', size=40)
+#         text = self.__create_string()
+#         length, height = text_size(text, font)
+#         margin = 15
+#         image = Image.new('RGBA', (length + margin * 2, height), '#282830')
+#         idraw = ImageDraw.Draw(image)
+#         border = 0
+#
+#         if isinstance(text, (list, tuple)):
+#             for item in text:
+#                 idraw.text((margin, border), f'{item}', font=font)
+#                 border += 65
+#         else:
+#             idraw.text((margin, border), f'{text}', font=font)
+#         image.save('image.png')
